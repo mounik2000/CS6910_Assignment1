@@ -50,6 +50,7 @@ def feed_forward_neural_network(X,W_list,b_list,activation_function, num_hidden_
   a_i = b_list[num_hidden_layers].flatten()+np.dot(h_prev,W_list[num_hidden_layers].T)
   a_list.append(a_i)
   a_i = a_i-np.max(a_i)
+  #calculating softmax  
   a_i = np.where(a_i<-15,-15,a_i)
   a_i = np.where(a_i>15,15,a_i)
   a_i = np.exp(a_i)
@@ -116,6 +117,7 @@ def get_loss_value_and_prediction(X,Y,weights,biases,activation_function,num_hid
         Loss+= (forming_Y[i][j]-y_pred[i][j])**2
 
   Loss = Loss/num
+  #Loss regularization
   for i in range(len(weights)):
     Loss+=(wt/2)*np.sum(np.square(weights[i]))
   for i in range(len(biases)):
@@ -166,6 +168,7 @@ def split_train_valid_data(X_train,Y_train):
     np.random.shuffle(arr)
     train_X = []
     train_Y = []
+    # 10% spilt to be considered as validation data
     valid_X = []
     valid_Y = []
     for i in range(size):
@@ -232,6 +235,7 @@ def get_accuracy(Y_true,Y_pred):
   p = int (size)
   for i in range(p):
     max_i = 0
+    #index of predicted class
     max_j = 0
     for j in range(10):
       if (Y_pred[i][j]>max_i):
@@ -243,11 +247,13 @@ def get_accuracy(Y_true,Y_pred):
   return count/size
 
 
-
+# to get derivatives of weights and biases
 def get_derivatives(W_list,b_list,X,Y,loss_type,num_hidden_layers, hidden_layer_size,activation_function):
+  #initializing der_w, der_b to 0
   [der_w,der_b] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
   X.reshape(X.shape[0],784)
   size = X.shape[0]
+  #obtaining h, a lists and y_predictions using feed forward neural network
   [h_list,a_list,list_y] = feed_forward_neural_network(X,W_list,b_list,activation_function, num_hidden_layers, hidden_layer_size)
   gradient_a = []
   L = num_hidden_layers+1
@@ -309,6 +315,7 @@ def do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_param
       b_next = b-eta*(db+weight_decay*b)       
       w = w_next
       b = b_next
+    #logging loses and accuracies  
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
                                     num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
@@ -356,6 +363,7 @@ def do_momentum(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
       prev_b = gamma*prev_b+eta*db+eta*weight_decay*b
       w = w_next
       b = b_next
+    #logging loses and accuracies    
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
                                        num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
@@ -404,6 +412,7 @@ def do_nesterov(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
       prev_b = gamma*prev_b+eta*db+eta*weight_decay*b
       w = w_next
       b = b_next
+    #logging loses and accuracies    
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
                                        num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
@@ -457,6 +466,7 @@ def do_rmsprop(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_p
         b_next[i] = b[i] - (eta/(np.sqrt(epsilon+v_b[i])))*(db[i])
       w = w_next
       b = b_next
+    #logging loses and accuracies    
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
                                        num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
@@ -519,6 +529,7 @@ def do_adam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_para
         b_next[i] = b[i] - (eta/(np.sqrt(epsilon+v_bhat[i])))*(m_bhat[i])
       w = w_next
       b = b_next
+    #logging loses and accuracies    
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
                                        num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
@@ -579,6 +590,7 @@ def do_nadam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_par
         b_next[i] = b[i] - (eta/(np.sqrt(epsilon+v_bhat[i])))*(nest(m_bhat[i],beta1,c+1,db[i]))
       w = w_next
       b = b_next
+    #logging loses and accuracies    
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
                                        num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
@@ -636,12 +648,12 @@ sweep_config = {
             'values' : ['random','Xavier']
         },
         'activation_function' : {
-            'values' : ['sigmoid','tanh','ReLU']
+            'values' : ['sigmoid','tanh']
         },
     },
 }
 
-sweep_id = wandb.sweep(sweep_config, entity="mounik2000", project="penultimate run")
+sweep_id = wandb.sweep(sweep_config, entity="mounik2000", project="test run")
 
 def sweep_train():
   config_defaults = {
