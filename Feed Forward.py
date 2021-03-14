@@ -23,39 +23,39 @@ def plot_sample_images(X_train, Y_train):
 
 #dimensions : 
 #X_input -> n
-#a_i,h_i : (ith hidden_layer_size)
+#a_i,h_i : n x (ith hidden_layer_size)
 #W_list[i] : (ith hidden_layer_size) x ({i-1}th hidden_layer_size)
-#b_list[i] : (ith hidden_layer_size)
+#b_list[i] : (ith hidden_layer_size) x 1
 #Output : h_list (h_1,h_2....h_{num_hidden_layers}), a_list (a_1,a_2....a_{num_hidden_layers+1})), y
-def feed_forward_neural_network(X_input, W_list, b_list, activation_function, num_hidden_layers, hidden_layer_size) :
-  
-  X_input = X_input.reshape(-1,1)
-  h_prev = X_input
-  a_i = []
-  h_list = []
+
+def feed_forward_neural_network(X,W_list,b_list,activation_function, num_hidden_layers, hidden_layer_size):
+  X.reshape(X.shape[0],784)
+  size = X.shape[0]
   a_list = []
-  #Other than o/p layer
-  for i in range(0, num_hidden_layers) :
-    a_i = b_list[i].reshape(-1,1) + np.dot(W_list[i], h_prev)
+  h_list = []
+  y = []
+  h_prev = X
+  for i in range(0,num_hidden_layers):
+    a_i = b_list[i].flatten()+np.dot(h_prev,W_list[i].T)
     a_list.append(a_i)
     if activation_function == 'sigmoid' :
+      a_i = np.where(a_i<-15,-15,a_i)
+      a_i = np.where(a_i>15,15,a_i)
       h_prev = 1 /( 1 + np.exp(-1 * a_i))
     elif activation_function == 'tanh' :
       h_prev = np.tanh(a_i)
     elif activation_function == 'ReLU' :
       h_prev = np.maximum(0, a_i)
     h_list.append(h_prev)
-  a_i = b_list[num_hidden_layers].reshape(-1,1) + np.dot(W_list[num_hidden_layers], h_prev)    
-  #soft_max
+  a_i = b_list[num_hidden_layers].flatten()+np.dot(h_prev,W_list[num_hidden_layers].T)
   a_list.append(a_i)
+  a_i = a_i-np.max(a_i)
+  a_i = np.where(a_i<-15,-15,a_i)
+  a_i = np.where(a_i>15,15,a_i)
   a_i = np.exp(a_i)
-  summ = np.sum((a_i))
+  summ = (np.sum((a_i),axis = 1)).reshape(-1,1)
   y = a_i / summ
-  parameters = []
-  parameters.append(h_list)
-  parameters.append(a_list)
-  parameters.append(y)
-  return parameters
+  return [h_list,a_list,y]
 
 # Question 3
 
@@ -66,13 +66,13 @@ def initialized_weights(weight_initializer,num_hidden_layers,hidden_layer_size):
     K = hidden_layer_size
     W_list = []
     b_list = []
-    W_list.append(np.random.random([K,784]))
+    W_list.append(np.random.randn(K, 784))
     for i in range(0, num_hidden_layers-1) :
-      W_list.append(np.random.random([K,K]))
-    W_list.append(np.random.random([10,K])) 
+      W_list.append(np.random.randn(K, K))
+    W_list.append(np.random.randn(10, K)) 
     for i in range(0,num_hidden_layers) :
-      b_list.append(np.random.random([K,1]))
-    b_list.append(np.random.random([10,1]))
+      b_list.append(np.random.randn(K, 1))
+    b_list.append(np.random.randn(10, 1))
     W_list = np.array(W_list)
     b_list = np.array(b_list)
     return [W_list, b_list]
@@ -95,30 +95,32 @@ def initialized_weights(weight_initializer,num_hidden_layers,hidden_layer_size):
     return initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
 
 # Compute ouput and loss
-def get_loss_value_and_prediction(X,Y,weights,biases,activation_function,num_hidden_layers,hidden_layer_size, loss_type):
-  y_pred = []
-  for i in range(X.shape[0]):
-    params = feed_forward_neural_network(X[i],weights,biases,activation_function,num_hidden_layers,hidden_layer_size)
-    y = params[2]
-    y = y.flatten()
-    y_pred.append(y)
-  y_pred = np.array(y_pred)
+def get_loss_value_and_prediction(X,Y,weights,biases,activation_function,num_hidden_layers,hidden_layer_size, loss_type, wt):
+  y_pred = feed_forward_neural_network(X,weights,biases,activation_function,num_hidden_layers,hidden_layer_size)[2]
   Loss = 0
   num = X.shape[0]
   forming_Y = []
   for i in range(num):
-    e_y = np.zeros((10,1))
+    e_y = np.zeros((10,))
     e_y[Y[i]] = 1
     forming_Y.append(e_y)
   if (loss_type == 'entropy'):
     for i in range(num):
       for j in range(10):
-        if(forming_Y[i][j] == 1):
-          Loss+=(1/num)*(-1*np.log(y_pred[i][j]))
+        if (forming_Y[i][j] == 1):
+          if (y_pred[i][j] != 1):
+            Loss+=(-1*np.log(y_pred[i][j]))
   else:
     for i in range(num):
       for j in range(10):
-        Loss+= (1/num)*(forming_Y[i][j]-y_pred[i][j])**2
+        Loss+= (forming_Y[i][j]-y_pred[i][j])**2
+
+  Loss = Loss/num
+  for i in range(len(weights)):
+    Loss+=(wt/2)*np.sum(np.square(weights[i]))
+  for i in range(len(biases)):
+    Loss+=(wt/2)*np.sum(np.square(biases[i]))
+  
   return [Loss,y_pred]
 
 # Initialize dw,db to 0
@@ -143,70 +145,18 @@ def initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size ) :
 def get_diff_g(h_k, activation_function):
   if activation_function == 'sigmoid' :
       # g'(z) = g(z) * (1 - g(z))
-    for i in range(0, h_k.shape[0]) :
-      h_k[i] = h_k[i] * (1 - h_k[i])
+    h_k =  np.multiply(h_k,1-h_k)
 
   elif activation_function == 'tanh' :
       # g'(z) = 1 - (g(z))^2
-    for i in range(0, h_k.shape[0]) :
-      h_k[i] = 1 - pow(h_k[i], 2)
+    h_k = 1-np.multiply(h_k,h_k)
 
   elif activation_function == 'ReLU' :
       # g'(z) = 1 if z is positive, 0 otherwise
-    for i in range(0, h_k.shape[0]) :
-      if (h_k[i]>0):
-        h_k[i] = 1.0
-      else:
-        h_k[i] = 0.0
-  return (h_k.reshape(-1, 1))   
+    h_k =   np.where(h_k>0, 1, 0)
+  return (h_k)       
 
 
-#Find gradient of loss function w.r.t weights, biases for one input output
-def back_propagation(W_list,b_list,x_input,y_true,loss_type,num_hidden_layers, hidden_layer_size,activation_function, parameters):
-  L = num_hidden_layers+1
-  h_list = parameters[0]
-  a_list = parameters[1]
-  y_pred = parameters[2]
-  y_pred.reshape(-1,1)
-  x_input = (x_input).reshape(-1,1)
-  e_y = np.zeros((10,1))
-  e_y[y_true] = [1]
-  diff_a_list = [] # L
-  diff_h_list = [] # L-1
-  diff_W_list = [] # L
-  diff_b_list = [] # L
-  for i in range(0, L) :
-    diff_a_list.append(0)
-    diff_h_list.append(0)
-    diff_W_list.append(0)
-    diff_b_list.append(0)
-  diff_h_list.pop(0) # to make size L-1
-  if (loss_type == 'entropy'):
-    diff_a_list[L-1] =  - ( e_y - y_pred ) 
-  else:
-    #Filling square loss
-    diff_a_list[L-1] = []
-    for j in range(10):
-      #Derivative w.r.t a[L-1][j]
-      p = 0
-      for i in range(10):
-        if (i == j):
-          p += 2*(y_pred[j]-e_y[j])*(y_pred[j]-y_pred[j]*y_pred[j])
-        else:
-          p += 2*(y_pred[i]-e_y[i])*(-y_pred[i]*y_pred[j])
-      diff_a_list[L-1].append(p)
-    diff_a_list[L-1] = np.array(diff_a_list[L-1])
-  for k in range(L-1, 0, -1) :
-    diff_W_list[k] = np.dot(diff_a_list[k],(h_list[k-1]).T)
-    diff_b_list[k] = diff_a_list[k]
-    diff_h_list[k-1] = np.dot(W_list[k].T, diff_a_list[k])
-    diff_a_list[k-1] = np.multiply ( diff_h_list[k-1], get_diff_g(h_list[k-1], activation_function))
-  diff_W_list[0] = np.dot(diff_a_list[0], x_input.T)
-  diff_b_list[0] = diff_a_list[0]
-  return [np.array(diff_W_list), np.array(diff_b_list)]
-
-
-#Training and Validation
 def split_train_valid_data(X_train,Y_train):
     if(len(X_train) == 0):
         A = np.array([])
@@ -231,8 +181,6 @@ def split_train_valid_data(X_train,Y_train):
     valid_Y = np.array(valid_Y)
     return [train_X,train_Y,valid_X,valid_Y]
 
-
-# Apply gradient descent
 def updated_weights_gd(train_X, train_Y,L, hyper_parameter_combination,initial_weights,initial_biases,loss_type,classes):
   num_epochs = hyper_parameter_combination["num_epochs"]
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
@@ -242,11 +190,10 @@ def updated_weights_gd(train_X, train_Y,L, hyper_parameter_combination,initial_w
   weight_decay = hyper_parameter_combination["weight_decay"]
   weight_initializer = hyper_parameter_combination["weight_initializer"]
   activation_function = hyper_parameter_combination["activation_function"]
+  print(optimizer)
   if (optimizer == 'vanilla'):
     return do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,len(train_X),L,classes)
   elif (optimizer == 'sgd'):
-    return do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,1,L,classes)
-  elif (optimizer == 'minibatch'):
     return do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,batch_size,L,classes)
   elif (optimizer == 'momentum'):
     return do_momentum(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,L,classes)
@@ -261,7 +208,6 @@ def updated_weights_gd(train_X, train_Y,L, hyper_parameter_combination,initial_w
   else:
     return do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,batch_size,L,classes)    
 
-#Backpropagation code
 def feedforward_with_backpropagation(train_X, train_Y, valid_X,valid_Y, X_test,Y_test, hyper_parameter_combination,loss_type,classes):
   num_epochs = hyper_parameter_combination["num_epochs"]
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
@@ -288,7 +234,7 @@ def get_accuracy(Y_true,Y_pred):
     max_i = 0
     max_j = 0
     for j in range(10):
-      if(Y_pred[i][j]>max_i):
+      if (Y_pred[i][j]>max_i):
         max_j = j
         max_i = Y_pred[i][j]
     #print(str(max_j)+" "+str(Y_true[i]))
@@ -296,11 +242,58 @@ def get_accuracy(Y_true,Y_pred):
       count+=1
   return count/size
 
+
+
+def get_derivatives(W_list,b_list,X,Y,loss_type,num_hidden_layers, hidden_layer_size,activation_function):
+  [der_w,der_b] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
+  X.reshape(X.shape[0],784)
+  size = X.shape[0]
+  [h_list,a_list,list_y] = feed_forward_neural_network(X,W_list,b_list,activation_function, num_hidden_layers, hidden_layer_size)
+  gradient_a = []
+  L = num_hidden_layers+1
+  gradient_h = []
+  for i in range(L):
+    gradient_a.append(0)
+  for i in range(L-1):
+    gradient_h.append(0)
+  gradient_a[L-1] = np.zeros((X.shape[0],10))
+  for i in range(X.shape[0]):
+    y_pred = list_y[i]
+    y_pred.reshape(10,)
+    e_y = np.zeros((10,))
+    e_y[Y[i]] = 1
+    if (loss_type == 'entropy'):
+      gradient_a[L-1][i] =  - ( e_y - y_pred ) 
+    else:
+      diff_a_list = []
+      for j in range(10):
+        p = 0
+        for i in range(10):
+          if (i == j):
+            p += 2*(y_pred[j]-e_y[j])*(y_pred[j]-y_pred[j]*y_pred[j])
+          else:
+            p += 2*(y_pred[i]-e_y[i])*(-y_pred[i]*y_pred[j])
+        diff_a_list.append(p)
+      diff_a_list = np.array(diff_a_list)
+      gradient_a[L-1][i] =  diff_a_list
+  
+  #We got grad_aL(Loss)
+  for k in range(L-1,0,-1):
+    der_w[k] = np.dot(gradient_a[k].T,h_list[k-1])
+    der_b[k] = np.sum(gradient_a[k],axis = 0).reshape(-1,1)
+    gradient_h[k-1] = np.dot(gradient_a[k],W_list[k])
+    gradient_a[k-1] = np.multiply(gradient_h[k-1],get_diff_g(h_list[k-1], activation_function))
+
+  der_w[0] = np.dot(gradient_a[0].T,X)
+  der_b[0] = np.sum(gradient_a[0],axis = 0).reshape(-1,1)
+  return [der_w,der_b]
+
 #All gradient descent algos
 
 #Stochastic, Vanilla, Minibatch GD (batch size argument)
 def do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,batch_size,L,classes):
   [valid_X,valid_Y, X_test,Y_test] = L
+  eta = hyper_parameter_combination["eta"]
   num_epochs = hyper_parameter_combination["num_epochs"]
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
   hidden_layer_size = hyper_parameter_combination["hidden_layer_size"]
@@ -308,55 +301,32 @@ def do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_param
   activation_function = hyper_parameter_combination["activation_function"]
   w = initial_weights
   b = initial_biases
-  min_loss = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)[0]
   for iter in range(num_epochs):
-    [dw, db] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
     size = train_X.shape[0]
-    for i in range(size):
-      params = feed_forward_neural_network(train_X[i], w, b, activation_function, num_hidden_layers, hidden_layer_size)
-      [add_w,add_b] = back_propagation(w,b,train_X[i],train_Y[i],loss_type,num_hidden_layers, hidden_layer_size, activation_function, params)
-      dw+=(add_w/size)
-      db+=(add_b/size)
-      batch_size2 = batch_size
-      if (batch_size == train_X.shape[0]):
-        batch_size2 = size
-      if (i+1)%batch_size2 == 0:
-        
-        min_w = w
-        min_b = b
-        min_eta = 0
-        for eta_L in range(-15,2,1):
-          eta = pow(10,eta_L)
-          w_next = w-eta*(dw+weight_decay*w)
-          b_next = b-eta*(db+weight_decay*b)
-          loss_params = get_loss_value_and_prediction(valid_X,valid_Y,w_next,b_next,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
-          if (loss_params[0] < min_loss):
-            min_loss = loss_params[0]
-            min_w = w_next
-            min_b = b_next
-            min_eta = eta
-        w = min_w
-        b = min_b
-        loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
-        loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
-        val_loss = loss_params1[0]
-        val_accuracy = get_accuracy(valid_Y,loss_params1[1])
-        loss = loss_params2[0]
-        accuracy = get_accuracy(Y_test,loss_params2[1])
-        to_log = dict()
-        to_log["val_loss"] = val_loss
-        to_log["val_accuracy"] = val_accuracy
-        to_log["accuracy"] = accuracy
-        to_log["loss"] = loss
-        to_log["epoch"] = iter
-        p = np.array(loss_params2[1])
-        print(to_log)
-        wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
-        wandb.log(to_log)
+    for i in range(0,int(size/batch_size)):
+      [dw,db] = get_derivatives(w,b,train_X[i*batch_size:(i+1)*batch_size],train_Y[i*batch_size:(i+1)*batch_size],loss_type,num_hidden_layers, hidden_layer_size,activation_function)
+      w_next = w-eta*(dw+weight_decay*w)
+      b_next = b-eta*(db+weight_decay*b)       
+      w = w_next
+      b = b_next
+    loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
+    loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
+    val_loss = loss_params1[0]
+    val_accuracy = get_accuracy(valid_Y,loss_params1[1])
+    loss = loss_params2[0]
+    accuracy = get_accuracy(Y_test,loss_params2[1])
+    to_log = dict()
+    to_log["val_loss"] = val_loss
+    to_log["val_accuracy"] = val_accuracy
+    to_log["accuracy"] = accuracy
+    to_log["loss"] = loss
+    to_log["epoch"] = iter
+    p = np.array(loss_params2[1])
+    print(to_log)
+    wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
+    wandb.log(to_log)
   return [w,b]
 
 
@@ -369,31 +339,27 @@ def do_momentum(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
   hidden_layer_size = hyper_parameter_combination["hidden_layer_size"]
   weight_decay = hyper_parameter_combination["weight_decay"]
   activation_function = hyper_parameter_combination["activation_function"]
+  batch_size = hyper_parameter_combination["batch_size"]
   w = initial_weights
   b = initial_biases
   gamma = 0.9
-  min_loss = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)[0]
   [prev_w, prev_b] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
   for iter in range(num_epochs):
-    [dw, db] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
     size = train_X.shape[0]
-    for i in range(size):
-      params = feed_forward_neural_network(train_X[i], w, b, activation_function, num_hidden_layers, hidden_layer_size)
-      [add_w,add_b] = back_propagation(w,b,train_X[i],train_Y[i],loss_type,num_hidden_layers, hidden_layer_size, activation_function, params)
-      dw+=(add_w/size)
-      db+=(add_b/size)
-    min_eta = 0
-    w_next = w - (gamma*prev_w+eta*dw+eta*weight_decay*w)
-    b_next = b - (gamma*prev_b+eta*db+eta*weight_decay*b)
-    prev_w = gamma*prev_w+eta*dw+eta*weight_decay*w
-    prev_b = gamma*prev_b+eta*db+eta*weight_decay*b
-    w = w_next
-    b = b_next
+    for i in range(0,int(size/batch_size)):
+      [dw,db] = get_derivatives(w,b,train_X[i*batch_size:(i+1)*batch_size],train_Y[i*batch_size:(i+1)*batch_size],loss_type,num_hidden_layers, hidden_layer_size,activation_function)
+      
+      min_eta = 0
+      w_next = w - (gamma*prev_w+eta*dw+eta*weight_decay*w)
+      b_next = b - (gamma*prev_b+eta*db+eta*weight_decay*b)
+      prev_w = gamma*prev_w+eta*dw+eta*weight_decay*w
+      prev_b = gamma*prev_b+eta*db+eta*weight_decay*b
+      w = w_next
+      b = b_next
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
+                                       num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
-                                    num_hidden_layers,hidden_layer_size, loss_type)
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     val_loss = loss_params1[0]
     val_accuracy = get_accuracy(valid_Y,loss_params1[1])
     loss = loss_params2[0]
@@ -418,36 +384,30 @@ def do_nesterov(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
   hidden_layer_size = hyper_parameter_combination["hidden_layer_size"]
   weight_decay = hyper_parameter_combination["weight_decay"]
+  batch_size = hyper_parameter_combination["batch_size"]
   activation_function = hyper_parameter_combination["activation_function"]
   w = initial_weights
   b = initial_biases
   gamma = 0.9
-  min_loss = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)[0]
   [prev_w, prev_b] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
   for iter in range(num_epochs):
     [dw, db] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
-    v_w = gamma*prev_w
-    v_b = gamma*prev_b
     size = train_X.shape[0]
-    for i in range(size):
-      params = feed_forward_neural_network(train_X[i], w-v_w, b-v_b, activation_function, num_hidden_layers, hidden_layer_size)
-      [add_w,add_b] = back_propagation(w-v_w,b-v_b,train_X[i],train_Y[i],loss_type,num_hidden_layers, hidden_layer_size, activation_function, params)
-      dw+=(add_w/size)
-      db+=(add_b/size)
-    min_w = w
-    min_b = b
-    min_eta = 0
-    w_next = w - (gamma*prev_w+eta*dw+eta*weight_decay*w)
-    b_next = b - (gamma*prev_b+eta*db+eta*weight_decay*b)
-    prev_w = gamma*prev_w+eta*dw+eta*weight_decay*w
-    prev_b = gamma*prev_b+eta*db+eta*weight_decay*b
-    w = w_next
-    b = b_next
+    for i in range(0,int(size/batch_size)):
+      v_w = gamma*prev_w
+      v_b = gamma*prev_b
+      [dw,db] = get_derivatives(w-v_w,b-v_b,train_X[i*batch_size:(i+1)*batch_size],train_Y[i*batch_size:(i+1)*batch_size],loss_type,num_hidden_layers, hidden_layer_size,activation_function)
+      min_eta = 0
+      w_next = w - (gamma*prev_w+eta*dw+eta*weight_decay*w)
+      b_next = b - (gamma*prev_b+eta*db+eta*weight_decay*b)
+      prev_w = gamma*prev_w+eta*dw+eta*weight_decay*w
+      prev_b = gamma*prev_b+eta*db+eta*weight_decay*b
+      w = w_next
+      b = b_next
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
+                                       num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
-                                    num_hidden_layers,hidden_layer_size, loss_type)
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     val_loss = loss_params1[0]
     val_accuracy = get_accuracy(valid_Y,loss_params1[1])
     loss = loss_params2[0]
@@ -469,6 +429,7 @@ def do_nesterov(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
 def do_rmsprop(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,L,classes):
   [valid_X,valid_Y, X_test,Y_test] = L
   eta = hyper_parameter_combination["eta"]
+  batch_size = hyper_parameter_combination["batch_size"]
   num_epochs = hyper_parameter_combination["num_epochs"]
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
   hidden_layer_size = hyper_parameter_combination["hidden_layer_size"]
@@ -479,39 +440,27 @@ def do_rmsprop(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_p
   [v_w,v_b] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
   epsilon = 1e-8
   beta = 0.9
-  min_loss = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)[0]
   
   for iter in range(num_epochs):
-    [dw, db] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
-    [w_next, b_next] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
     size = train_X.shape[0]
-    for i in range(size):
-      params = feed_forward_neural_network(train_X[i], w, b, activation_function, num_hidden_layers, hidden_layer_size)
-      [add_w,add_b] = back_propagation(w,b,train_X[i],train_Y[i],loss_type,num_hidden_layers, hidden_layer_size, activation_function, params)
-      dw+=(add_w/size)
-      db+=(add_b/size)
-    v_w = beta*v_w+(1-beta)*(np.square(dw))
-    v_b = beta*v_b+(1-beta)*(np.square(db))
-    min_w = w
-    min_b = b
-    min_eta = 0
-    for i in range(w.shape[0]):
-      for j in range(w[i].shape[0]):
-        for k in range(w[i][j].shape[0]):
-          w_next[i][j][k] = w[i][j][k] - (eta/(np.sqrt(epsilon+v_w[i][j][k])))*(dw[i][j][k])
-    for i in range(b.shape[0]):
-      for j in range(b[i].shape[0]):
-        for k in range(b[i][j].shape[0]):
-          b_next[i][j][k] = b[i][j][k] - (eta/(np.sqrt(epsilon+v_b[i][j][k])))*(db[i][j][k])
-    loss_params = get_loss_value_and_prediction(valid_X,valid_Y,w_next,b_next,activation_function,
-                                      num_hidden_layers,hidden_layer_size, loss_type)
-    w = w_next
-    b = b_next
+    for i in range(0,int(size/batch_size)):
+      [w_next, b_next] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
+      [dw,db] = get_derivatives(w,b,train_X[i*batch_size:(i+1)*batch_size],train_Y[i*batch_size:(i+1)*batch_size],loss_type,num_hidden_layers, hidden_layer_size,activation_function)
+      v_w = beta*v_w+(1-beta)*(np.square(dw))
+      v_b = beta*v_b+(1-beta)*(np.square(db))
+      min_w = w
+      min_b = b
+      min_eta = 0
+      for i in range(w.shape[0]):
+        w_next[i] = w[i] - (eta/(np.sqrt(epsilon+v_w[i])))*(dw[i])
+      for i in range(b.shape[0]):
+        b_next[i] = b[i] - (eta/(np.sqrt(epsilon+v_b[i])))*(db[i])
+      w = w_next
+      b = b_next
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
+                                       num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
-                                    num_hidden_layers,hidden_layer_size, loss_type)
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     val_loss = loss_params1[0]
     val_accuracy = get_accuracy(valid_Y,loss_params1[1])
     loss = loss_params2[0]
@@ -528,14 +477,17 @@ def do_rmsprop(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_p
     wandb.log(to_log)
   return [w,b]
 
+
 #adam
 def do_adam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,L,classes):
   [valid_X,valid_Y, X_test,Y_test] = L
+  eta = hyper_parameter_combination["eta"]
   num_epochs = hyper_parameter_combination["num_epochs"]
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
   hidden_layer_size = hyper_parameter_combination["hidden_layer_size"]
   weight_decay = hyper_parameter_combination["weight_decay"]
   activation_function = hyper_parameter_combination["activation_function"]
+  batch_size = hyper_parameter_combination["batch_size"]
   w = initial_weights
   b = initial_biases
   [m_w,m_b] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
@@ -543,42 +495,34 @@ def do_adam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_para
   epsilon = 1e-8
   beta1 = 0.9
   beta2 = 0.99
-  min_loss = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)[0]
+  c = 0
   for iter in range(num_epochs):
     [dw, db] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
-    [w_next, b_next] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
     size = train_X.shape[0]
-    for i in range(size):
-      params = feed_forward_neural_network(train_X[i], w, b, activation_function, num_hidden_layers, hidden_layer_size)
-      [add_w,add_b] = back_propagation(w,b,train_X[i],train_Y[i],loss_type,num_hidden_layers, hidden_layer_size, activation_function, params)
-      dw+=(add_w/size)
-      db+=(add_b/size)
-    m_w = beta1*m_w+(1-beta1)*((dw))
-    m_b = beta1*m_b+(1-beta1)*((db))
-    v_w = beta2*v_w+(1-beta2)*(np.square(dw))
-    v_b = beta2*v_b+(1-beta2)*(np.square(db))
-    m_what = m_w/(1-pow(beta1,i+1))
-    m_bhat = m_b/(1-pow(beta1,i+1))
-    v_what = v_w/(1-pow(beta2,i+1))
-    v_bhat = v_b/(1-pow(beta2,i+1))
-    min_w = w
-    min_b = b
-    
-    for i in range(w.shape[0]):
-      for j in range(w[i].shape[0]):
-        for k in range(w[i][j].shape[0]):
-          w_next[i][j][k] = w[i][j][k] - (eta/(np.sqrt(epsilon+v_what[i][j][k])))*(m_what[i][j][k])
-    for i in range(b.shape[0]):
-      for j in range(b[i].shape[0]):
-        for k in range(b[i][j].shape[0]):
-          b_next[i][j][k] = b[i][j][k] - (eta/(np.sqrt(epsilon+v_bhat[i][j][k])))*(m_bhat[i][j][k])
-    w = w_next
-    b = b_next
+    for i in range(0,int(size/batch_size)):
+      c+=1
+      [w_next, b_next] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
+      [dw,db] = get_derivatives(w,b,train_X[i*batch_size:(i+1)*batch_size],train_Y[i*batch_size:(i+1)*batch_size],loss_type,num_hidden_layers, hidden_layer_size,activation_function)
+      m_w = beta1*m_w+(1-beta1)*((dw))
+      m_b = beta1*m_b+(1-beta1)*((db))
+      v_w = beta2*v_w+(1-beta2)*(np.square(dw))
+      v_b = beta2*v_b+(1-beta2)*(np.square(db))
+      m_what = m_w/(1-pow(beta1,c+1))
+      m_bhat = m_b/(1-pow(beta1,c+1))
+      v_what = v_w/(1-pow(beta2,c+1))
+      v_bhat = v_b/(1-pow(beta2,c+1))
+      min_w = w
+      min_b = b
+      for i in range(w.shape[0]):
+        w_next[i] = w[i] - (eta/(np.sqrt(epsilon+v_what[i])))*(m_what[i])
+      for i in range(b.shape[0]):
+        b_next[i] = b[i] - (eta/(np.sqrt(epsilon+v_bhat[i])))*(m_bhat[i])
+      w = w_next
+      b = b_next
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
+                                       num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
-                                    num_hidden_layers,hidden_layer_size, loss_type)
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     val_loss = loss_params1[0]
     val_accuracy = get_accuracy(valid_Y,loss_params1[1])
     loss = loss_params2[0]
@@ -598,8 +542,10 @@ def do_adam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_para
 #nadam
 def do_nadam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_parameter_combination,L,classes):
   [valid_X,valid_Y, X_test,Y_test] = L
+  eta = hyper_parameter_combination["eta"]
   num_epochs = hyper_parameter_combination["num_epochs"]
   num_hidden_layers = hyper_parameter_combination["num_hidden_layers"]
+  batch_size = hyper_parameter_combination["batch_size"]
   hidden_layer_size = hyper_parameter_combination["hidden_layer_size"]
   weight_decay = hyper_parameter_combination["weight_decay"]
   activation_function = hyper_parameter_combination["activation_function"]
@@ -610,40 +556,33 @@ def do_nadam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_par
   epsilon = 1e-8
   beta1 = 0.9
   beta2 = 0.99
-  min_loss = 5000
+  c = 0
   for iter in range(num_epochs):
-    [dw, db] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
-    [w_next, b_next] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
     size = train_X.shape[0]
-    for i in range(size):
-      params = feed_forward_neural_network(train_X[i], w, b, activation_function, num_hidden_layers, hidden_layer_size)
-      [add_w,add_b] = back_propagation(w,b,train_X[i],train_Y[i],loss_type,num_hidden_layers, hidden_layer_size, activation_function, params)
-      dw+=(add_w/size)
-      db+=(add_b/size)
-    m_w = beta1*m_w+(1-beta1)*((dw))
-    m_b = beta1*m_b+(1-beta1)*((db))
-    v_w = beta2*v_w+(1-beta2)*(np.square(dw))
-    v_b = beta2*v_b+(1-beta2)*(np.square(db))
-    m_what = m_w/(1-pow(beta1,i+1))
-    m_bhat = m_b/(1-pow(beta1,i+1))
-    v_what = v_w/(1-pow(beta2,i+1))
-    v_bhat = v_b/(1-pow(beta2,i+1))
-    min_w = w
-    min_b = b
-    for i in range(w.shape[0]):
-      for j in range(w[i].shape[0]):
-        for k in range(w[i][j].shape[0]):
-          w_next[i][j][k] = w[i][j][k] - (eta/(np.sqrt(epsilon+v_what[i][j][k])))*(nest(m_what[i][j][k],beta1,i+1,dw[i][j][k]))
-    for i in range(b.shape[0]):
-      for j in range(b[i].shape[0]):
-        for k in range(b[i][j].shape[0]):
-          b_next[i][j][k] = b[i][j][k] - (eta/(np.sqrt(epsilon+v_bhat[i][j][k])))*(nest(m_bhat[i][j][k],beta1,i+1,db[i][j][k]))
-    w = w_next
-    b = b_next
+    for i in range(0,int(size/batch_size)):
+      [w_next, b_next] = initialize_diff_weights_and_biases( num_hidden_layers, hidden_layer_size)
+      c+=1
+      [dw,db] = get_derivatives(w,b,train_X[i*batch_size:(i+1)*batch_size],train_Y[i*batch_size:(i+1)*batch_size],loss_type,num_hidden_layers, hidden_layer_size,activation_function)
+      m_w = beta1*m_w+(1-beta1)*((dw))
+      m_b = beta1*m_b+(1-beta1)*((db))
+      v_w = beta2*v_w+(1-beta2)*(np.square(dw))
+      v_b = beta2*v_b+(1-beta2)*(np.square(db))
+      m_what = m_w/(1-pow(beta1,c+1))
+      m_bhat = m_b/(1-pow(beta1,c+1))
+      v_what = v_w/(1-pow(beta2,c+1))
+      v_bhat = v_b/(1-pow(beta2,c+1))
+      min_w = w
+      min_b = b
+      for i in range(w.shape[0]):
+        w_next[i] = w[i] - (eta/(np.sqrt(epsilon+v_what[i])))*(nest(m_what[i],beta1,c+1,dw[i]))
+      for i in range(b.shape[0]):
+        b_next[i] = b[i] - (eta/(np.sqrt(epsilon+v_bhat[i])))*(nest(m_bhat[i],beta1,c+1,db[i]))
+      w = w_next
+      b = b_next
     loss_params1 = get_loss_value_and_prediction(valid_X,valid_Y,w,b,activation_function,
-                                       num_hidden_layers,hidden_layer_size, loss_type)
+                                       num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     loss_params2 = get_loss_value_and_prediction(X_test,Y_test,w,b,activation_function,
-                                    num_hidden_layers,hidden_layer_size, loss_type)
+                                    num_hidden_layers,hidden_layer_size, loss_type,weight_decay)
     val_loss = loss_params1[0]
     val_accuracy = get_accuracy(valid_Y,loss_params1[1])
     loss = loss_params2[0]
@@ -662,3 +601,90 @@ def do_nadam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_par
 
 def nest(mthat,beta1,t,dw):
   return (beta1*mthat)+(((1-beta1)/(1-pow(beta1,t)))*dw)
+
+
+# Question 4
+sweep_config = {
+    'method' : 'random',
+    'metric': {
+      'name': 'accuracy',
+      'goal': 'maximize'   
+    },
+    'parameters': {
+        'epochs': {
+            'values' : [20,30,40,50,60]
+        },
+        'num_hidden_layers': {
+            'values' : [3,4,5]
+        },
+        'hidden_layer_size': {
+            'values' : [16,32,64,128]
+        },
+        'weight_decay':{
+            'values' : [0,0.00005,0.0005,0.005]
+        },
+        'batch_size' : {
+            'values' : [8,16,32,64]
+        },
+        'optimizer' : {
+            'values' : ['momentum','sgd','adam','nadam','rmsprop','nesterov','vanilla']
+        },
+        'eta' : {
+            'values' : [1e-6,1e-5,1e-4,1e-3]  
+        },
+        'initializer' : {
+            'values' : ['random','Xavier']
+        },
+        'activation_function' : {
+            'values' : ['sigmoid','tanh','ReLU']
+        },
+    },
+}
+
+sweep_id = wandb.sweep(sweep_config, entity="mounik2000", project="penultimate run")
+
+def sweep_train():
+  config_defaults = {
+        'epochs': 10,
+        'num_hidden_layers': 4,
+        'hidden_layer_size': 32,
+        'weight_decay':0.0005,
+        'batch_size' : '16',
+        'optimizer' : 'sgd',
+        'initializer' : 'random',
+        'eta' : 1e-2,
+        'activation_function' : 'sigmoid'
+  }
+  run = wandb.init(config = config_defaults)
+  config = wandb.config
+  hyper_parameter_combination = {}
+  hyper_parameter_combination["num_epochs"] = config.epochs
+  hyper_parameter_combination["num_hidden_layers"] = config.num_hidden_layers
+  hyper_parameter_combination["hidden_layer_size"] = config.hidden_layer_size
+  hyper_parameter_combination["optimizer"] = config.optimizer
+  hyper_parameter_combination["batch_size"] = config.batch_size
+  hyper_parameter_combination["weight_decay"] = config.weight_decay
+  hyper_parameter_combination["weight_initializer"] = config.initializer
+  hyper_parameter_combination["activation_function"] = config.activation_function
+  hyper_parameter_combination["eta"] = config.eta
+  
+
+  (X_train, Y_train), (X_test, Y_test) = fashion_mnist.load_data()
+  classes = plot_sample_images(X_train, Y_train)
+  
+  X_train = X_train / 255.0
+  X_test = X_test / 255.0
+  X_train = X_train.reshape(X_train.shape[0],784)
+  X_test = X_test.reshape(X_test.shape[0],784)
+  
+  
+   
+  loss_type = 'entropy'
+
+
+  [train_X,train_Y,valid_X,valid_Y] = split_train_valid_data(X_train,Y_train)
+  feedforward_with_backpropagation(train_X, train_Y,valid_X,valid_Y,X_test, Y_test, hyper_parameter_combination,loss_type,classes)
+  return
+
+
+wandb.agent(sweep_id, sweep_train)
