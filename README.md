@@ -4,9 +4,10 @@ Implementing feedforward neural network to classify fashion-MNIST dataset, using
 
 
 ## Instructions for running the code: ##
-Make sure wandb is installed (Use bash command - pip install wandb)
-Clone the repo and run the command - python "Feed Forward.py"
 
+Make sure wandb is installed (Use bash command - pip install wandb)
+
+Clone the repo and run the command - python "Feed Forward.py"
 
 ## Contributions: ##
 
@@ -30,7 +31,5 @@ CS17B004:
  - debugging code
  - plotting the confusion matrix
  - analysing the parallel co-ordinates plot and writing inferences
-
-We, Mounik VVSS and Pragnya Anuboina, swear on our honour that the above declaration is correct.
 
 
