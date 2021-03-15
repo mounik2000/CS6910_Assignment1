@@ -1,6 +1,40 @@
 from keras.datasets import fashion_mnist
 import numpy as np
 import wandb
+import plotly.graph_objs as go
+from sklearn.metrics import confusion_matrix
+
+def draw_confusion_matrix(y_pred, y_true) :
+  y_pred = np.argmax(y_pred, axis=1)
+  classes = []
+  classes.append("T-shirt/top")
+  classes.extend(['Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot'])
+  conf_matrix = confusion_matrix(y_pred, y_true, labels=range(len(classes)))
+  #getting diagonal elements
+  conf_diagonal_matrix = np.eye(len(conf_matrix)) * conf_matrix
+  np.fill_diagonal(conf_matrix, 0)
+  conf_matrix = conf_matrix.astype('float')
+  n_confused = np.sum(conf_matrix)
+  conf_matrix[conf_matrix == 0] = np.nan
+  #giving red shades to non diagonal elements
+  conf_matrix = go.Heatmap({'coloraxis': 'coloraxis1', 'x': classes, 'y': classes, 'z': conf_matrix, 'hoverongaps':False, 'hovertemplate': 'Predicted %{y}<br>Instead of %{x}<br>On %{z} examples<extra></extra>'})
+  conf_diagonal_matrix = conf_diagonal_matrix.astype('float')
+  n_right = np.sum(conf_diagonal_matrix)
+  conf_diagonal_matrix[conf_diagonal_matrix == 0] = np.nan
+  #giving green shade to diagonal elements
+  conf_diagonal_matrix = go.Heatmap({'coloraxis': 'coloraxis2', 'x': classes, 'y': classes, 'z': conf_diagonal_matrix,'hoverongaps':False, 'hovertemplate': 'Predicted %{y} just right<br>On %{z} examples<extra></extra>'})
+  fig = go.Figure((conf_diagonal_matrix, conf_matrix))
+  transparent = 'rgba(0, 0, 0, 0)'
+  n_total = n_right + n_confused
+  fig.update_layout({'coloraxis1': {'colorscale': [[0, transparent], [0, 'rgba(180, 0, 0, 0.05)'], [1, f'rgba(180, 0, 0, {max(0.2, (n_confused/n_total) ** 0.5)})']], 'showscale': False}})
+  fig.update_layout({'coloraxis2': {'colorscale': [[0, transparent], [0, f'rgba(0, 180, 0, {min(0.8, (n_right/n_total) ** 2)})'], [1, 'rgba(0, 180, 0, 1)']], 'showscale': False}})
+  xaxis = {'title':{'text':'y_true'}, 'showticklabels':False}
+  yaxis = {'title':{'text':'y_pred'}, 'showticklabels':False}
+  fig.update_layout(title={'text':'Confusion matrix', 'x':0.5}, paper_bgcolor=transparent, plot_bgcolor=transparent, xaxis=xaxis, yaxis=yaxis)
+  wandb.log({'Heat Map Confusion Matrix': wandb.data_types.Plotly(fig)})
+  return 0
+
+
 
 # Question 1
 def plot_sample_images(X_train, Y_train):
@@ -332,6 +366,7 @@ def do_sgd(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_param
     to_log["epoch"] = iter
     p = np.array(loss_params2[1])
     print(to_log)
+    q = draw_confusion_matrix(p, Y_test)
     wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
     wandb.log(to_log)
   return [w,b]
@@ -380,6 +415,7 @@ def do_momentum(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
     to_log["epoch"] = iter
     print(to_log)
     p = np.array(loss_params2[1])
+    q = draw_confusion_matrix(p, Y_test)
     wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
     wandb.log(to_log)
   return [w,b]
@@ -429,6 +465,7 @@ def do_nesterov(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_
     to_log["epoch"] = iter
     print(to_log)
     p = np.array(loss_params2[1])
+    q = draw_confusion_matrix(p, Y_test)
     wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
     wandb.log(to_log)
   return [w,b]
@@ -483,6 +520,7 @@ def do_rmsprop(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_p
     to_log["epoch"] = iter
     print(to_log)
     p = np.array(loss_params2[1])
+    q = draw_confusion_matrix(p, Y_test)
     wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
     wandb.log(to_log)
   return [w,b]
@@ -546,6 +584,7 @@ def do_adam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_para
     to_log["epoch"] = iter
     print(to_log)
     p = np.array(loss_params2[1])
+    q = draw_confusion_matrix(p, Y_test)
     wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
     wandb.log(to_log)
   return [w,b]
@@ -606,6 +645,7 @@ def do_nadam(train_X, train_Y,initial_weights,initial_biases,loss_type,hyper_par
     to_log["loss"] = loss
     to_log["epoch"] = iter
     p = np.array(loss_params2[1])
+    q = draw_confusion_matrix(p, Y_test)
     wandb.log({"Confusion Matrix" : wandb.plot.confusion_matrix(probs=p,y_true=Y_test,class_names=classes)})
     wandb.log(to_log)
     print(to_log)
@@ -627,7 +667,7 @@ sweep_config = {
             'values' : [20,30,40,50,60]
         },
         'num_hidden_layers': {
-            'values' : [3,4,5]
+            'values' : [3,4,5,6]
         },
         'hidden_layer_size': {
             'values' : [16,32,64,128]
@@ -642,7 +682,7 @@ sweep_config = {
             'values' : ['momentum','sgd','adam','nadam','rmsprop','nesterov','vanilla']
         },
         'eta' : {
-            'values' : [1e-6,1e-5,1e-4,1e-3]  
+            'values' : [1e-2,1e-3,1e-4,1e-5]  
         },
         'initializer' : {
             'values' : ['random','Xavier']
@@ -653,7 +693,7 @@ sweep_config = {
     },
 }
 
-sweep_id = wandb.sweep(sweep_config, entity="mounik2000", project="test run")
+sweep_id = wandb.sweep(sweep_config, entity="mounik2000", project="Name")
 
 def sweep_train():
   config_defaults = {
