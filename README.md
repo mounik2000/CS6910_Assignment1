@@ -2,6 +2,7 @@ CS6910 Deep Learning Assignment 1<a name="TOP"></a>
 ===================
 Implementing feedforward neural network to classify fashion-MNIST dataset, using backpropagation to train the network. (Without using automatic differenciation packages) 
 
+Report Link : https://wandb.ai/mounik2000/penultimate%20run/reports/Assignment-1--Vmlldzo1MzEwMjY
 
 ## Instructions for running the code: ##
 
